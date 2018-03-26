@@ -1,0 +1,102 @@
+diff --git a/webrtc/api/mediastreaminterface.h b/webrtc/api/mediastreaminterface.h
+index a52f0c7..fb45ccd 100644
+--- a/webrtc/api/mediastreaminterface.h
++++ b/webrtc/api/mediastreaminterface.h
+@@ -164,7 +164,8 @@ class AudioTrackSinkInterface {
+                       int bits_per_sample,
+                       int sample_rate,
+                       size_t number_of_channels,
+-                      size_t number_of_frames) = 0;
++                      size_t number_of_frames,
++                      uint32_t timestamp = 0) = 0;
+ 
+  protected:
+   virtual ~AudioTrackSinkInterface() {}
+diff --git a/webrtc/api/remoteaudiosource.cc b/webrtc/api/remoteaudiosource.cc
+index 47213fa..519d58b 100644
+--- a/webrtc/api/remoteaudiosource.cc
++++ b/webrtc/api/remoteaudiosource.cc
+@@ -140,7 +140,7 @@ void RemoteAudioSource::OnData(const AudioSinkInterface::Data& audio) {
+   rtc::CritScope lock(&sink_lock_);
+   for (auto* sink : sinks_) {
+     sink->OnData(audio.data, 16, audio.sample_rate, audio.channels,
+-                 audio.samples_per_channel);
++                 audio.samples_per_channel, audio.timestamp);
+   }
+ }
+ 
+diff --git a/webrtc/api/rtpsender.cc b/webrtc/api/rtpsender.cc
+index b2e2461..8077e59 100644
+--- a/webrtc/api/rtpsender.cc
++++ b/webrtc/api/rtpsender.cc
+@@ -30,11 +30,12 @@ void LocalAudioSinkAdapter::OnData(const void* audio_data,
+                                    int bits_per_sample,
+                                    int sample_rate,
+                                    size_t number_of_channels,
+-                                   size_t number_of_frames) {
++                                   size_t number_of_frames,
++                                   uint32_t timestamp) {
+   rtc::CritScope lock(&lock_);
+   if (sink_) {
+     sink_->OnData(audio_data, bits_per_sample, sample_rate, number_of_channels,
+-                  number_of_frames);
++                  number_of_frames, timestamp);
+   }
+ }
+ 
+diff --git a/webrtc/api/rtpsender.h b/webrtc/api/rtpsender.h
+index 6c05921..c68e6ce 100644
+--- a/webrtc/api/rtpsender.h
++++ b/webrtc/api/rtpsender.h
+@@ -58,7 +58,8 @@ class LocalAudioSinkAdapter : public AudioTrackSinkInterface,
+               int bits_per_sample,
+               int sample_rate,
+               size_t number_of_channels,
+-              size_t number_of_frames) override;
++              size_t number_of_frames,
++              uint32_t timestamp = 0) override;
+ 
+   // cricket::AudioSource implementation.
+   void SetSink(cricket::AudioSource::Sink* sink) override;
+diff --git a/webrtc/media/base/audiosource.h b/webrtc/media/base/audiosource.h
+index 97743bc..717730c 100644
+--- a/webrtc/media/base/audiosource.h
++++ b/webrtc/media/base/audiosource.h
+@@ -27,7 +27,8 @@ class AudioSource {
+                         int bits_per_sample,
+                         int sample_rate,
+                         size_t number_of_channels,
+-                        size_t number_of_frames) = 0;
++                        size_t number_of_frames,
++                        uint32_t timestamp) = 0;
+ 
+     // Called when the AudioSource is going away.
+     virtual void OnClose() = 0;
+diff --git a/webrtc/media/base/fakemediaengine.h b/webrtc/media/base/fakemediaengine.h
+index b095518..710b8fa 100644
+--- a/webrtc/media/base/fakemediaengine.h
++++ b/webrtc/media/base/fakemediaengine.h
+@@ -432,7 +432,8 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
+                 int bits_per_sample,
+                 int sample_rate,
+                 size_t number_of_channels,
+-                size_t number_of_frames) override {}
++                size_t number_of_frames,
++                uint32_t timestamp) override {}
+     void OnClose() override { source_ = nullptr; }
+     AudioSource* source() const { return source_; }
+ 
+diff --git a/webrtc/media/engine/webrtcvoiceengine.cc b/webrtc/media/engine/webrtcvoiceengine.cc
+index e6fa12e..6d53cb1 100644
+--- a/webrtc/media/engine/webrtcvoiceengine.cc
++++ b/webrtc/media/engine/webrtcvoiceengine.cc
+@@ -1374,7 +1374,8 @@ class WebRtcVoiceMediaChannel::WebRtcAudioSendStream
+               int bits_per_sample,
+               int sample_rate,
+               size_t number_of_channels,
+-              size_t number_of_frames) override {
++              size_t number_of_frames,
++              uint32_t timestamp) override {
+     RTC_CHECK_RUNS_SERIALIZED(&audio_capture_race_checker_);
+     RTC_DCHECK(voe_audio_transport_);
+     voe_audio_transport_->PushCaptureData(config_.voe_channel_id, audio_data,

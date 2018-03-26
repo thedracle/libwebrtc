@@ -46,6 +46,7 @@ elseif (WEBRTC_BRANCH_HEAD)
       STATUS "Checking out ${WEBRTC_BRANCH_HEAD}"
       ERROR "Unable to checkout ${WEBRTC_BRANCH_HEAD}"
   )
+
 endif (WEBRTC_REVISION)
 
 include(DepotTools)
@@ -146,14 +147,35 @@ libwebrtc_command(
 
 set(_NINJA_COMMAND ninja ${NINJA_ARGS} -C ${_NINJA_BUILD_DIR} webrtc system_wrappers_default)
 
+set(_PATCH_COMMAND patch -f -p1 -d ${CMAKE_SOURCE_DIR} < ${CMAKE_BINARY_DIR}/../../../patches/audio_timestamp.patch)
+
+set(_GIT_RESET ${GIT_EXECUTABLE} reset --hard HEAD)
+
 if (BUILD_TESTS)
   set(_NINJA_COMMAND ${_NINJA_COMMAND} webrtc_tests)
 endif (BUILD_TESTS)
 
 libwebrtc_command(
+    NAME webrtc-git-reset
+    COMMAND ${_GIT_RESET}
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT ${_GIT_RESET}
+    DEPENDS webrtc-generate
+)
+
+libwebrtc_command(
+    NAME webrtc-patch
+    COMMAND ${_PATCH_COMMAND}
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT ${_PATCH_COMMAND}
+    DEPENDS webrtc-git-reset
+)
+
+
+libwebrtc_command(
     NAME webrtc-build
     COMMAND ${_NINJA_COMMAND}
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    COMMENT "Running ninja"
-    DEPENDS webrtc-generate
+    COMMENT "HiYah! Running ninja"
+    DEPENDS webrtc-patch
 )
